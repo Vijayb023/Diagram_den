@@ -1,0 +1,6 @@
+<div class="mt-4 text-sm text-gray-800">
+  <div *ngIf="loading">Loading analysis...</div>
+  <div *ngIf="!loading && analysis" class="whitespace-pre-wrap">
+    {{ analysis }}
+  </div>
+</div>
