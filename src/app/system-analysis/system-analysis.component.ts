@@ -1,44 +1,72 @@
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { ChatService } from '../chat.service';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-system-analysis',
-  templateUrl: './system-analysis.component.html',
   standalone: true,
-  imports: [CommonModule], 
+  imports: [CommonModule, FormsModule],
+  templateUrl: './system-analysis.component.html',
 })
-export class SystemAnalysisComponent implements OnChanges {
+export class SystemAnalysisComponent {
   @Input() diagramText: string = '';
-  analysis: string = '';
-  loading: boolean = false;
+  @Output() requestDiagramImprovement = new EventEmitter<string>(); // 🔄 clearer event name
 
-  constructor(private chat: ChatService) {}
+  loading = false;
+  analysis = '';
+  analysisSections: { title: string; items: string[] }[] = [];
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['diagramText'] && this.diagramText) {
+  ngOnChanges() {
+    if (this.diagramText) {
       try {
         const parsed = JSON.parse(this.diagramText);
-        if (parsed?.nodes && parsed?.links) {
-          this.fetchAnalysis(parsed.nodes, parsed.links);
-        }
-      } catch (err) {
-        console.error('Invalid diagram JSON for analysis:', err);
+        this.generateAnalysis(parsed.nodes, parsed.links);
+      } catch {
+        this.analysis = 'Invalid diagram JSON.';
       }
     }
   }
 
-  async fetchAnalysis(nodes: any[], links: any[]) {
+  async generateAnalysis(nodes: any[], links: any[]) {
     this.loading = true;
     this.analysis = '';
     try {
-      const result = await this.chat.analyzeDiagram({ nodes, links });
-      this.analysis = result.analysis || 'No analysis returned.';
-    } catch (error) {
-      console.error('Analysis error:', error);
-      this.analysis = 'Failed to load analysis.';
+      const response = await fetch('http://localhost:8000/analyze-diagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodes, links }),
+      });
+      const data = await response.json();
+      this.analysis = data.analysis || 'No insights available.';
+      this.parseAnalysis(this.analysis);
+    } catch (err: any) {
+      this.analysis = 'Error fetching analysis.\n' + err.message;
     } finally {
       this.loading = false;
     }
+  }
+
+  parseAnalysis(text: string) {
+    this.analysisSections = [];
+    const pros = text.match(/(?<=Pros:)([\s\S]*?)(?=Cons:|$)/i);
+    const cons = text.match(/(?<=Cons:)([\s\S]*?)(?=Improvements:|$)/i);
+
+    if (pros) {
+      this.analysisSections.push({
+        title: 'Pros',
+        items: pros[0].trim().split('\n').filter(Boolean),
+      });
+    }
+
+    if (cons) {
+      this.analysisSections.push({
+        title: 'Cons',
+        items: cons[0].trim().split('\n').filter(Boolean),
+      });
+    }
+  }
+
+  handleConsClick(con: string) {
+    this.requestDiagramImprovement.emit(con); // ⬅ Emits clicked con for diagram update
   }
 }

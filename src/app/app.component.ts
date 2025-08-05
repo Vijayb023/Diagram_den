@@ -27,6 +27,8 @@ export class AppComponent {
   diagramNodes: NodeData[] = [];
   diagramLinks: LinkData[] = [];
   loading = false;
+  showJson = false;
+  modifications: string[] = [];
 
   constructor(private chat: ChatService) {}
 
@@ -37,7 +39,11 @@ export class AppComponent {
     this.diagramLinks = [];
 
     try {
-      const result = await this.chat.getDiagramData(this.description);
+      const result = await this.chat.getDiagramData({
+        prompt: this.description,
+        modifications: this.modifications,
+      });
+
       this.diagramNodes = Array.isArray(result.nodes) ? result.nodes : [];
       this.diagramLinks = Array.isArray(result.links) ? result.links : [];
       this.diagramText = JSON.stringify({ nodes: this.diagramNodes, links: this.diagramLinks }, null, 2);
@@ -47,5 +53,13 @@ export class AppComponent {
     } finally {
       this.loading = false;
     }
+  }
+
+  // Triggered when a con is selected in SystemAnalysisComponent
+  async handleConSelected(con: string) {
+    if (!this.modifications.includes(con)) {
+      this.modifications.push(con);
+    }
+    await this.generateDiagram(); // Automatically regenerate with the selected con
   }
 }

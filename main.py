@@ -24,6 +24,7 @@ app.add_middleware(
 
 class DiagramPrompt(BaseModel):
     prompt: str
+    modifications: list[str] | None = []
 
 class DiagramData(BaseModel):
     nodes: list
@@ -38,7 +39,7 @@ async def generate_diagram(data: DiagramPrompt):
         user_prompt = f"""
 Design a modern, cloud-native, and scalable system for the following request:
 
-\"{data.prompt}\"
+"{data.prompt}"
 
 Include realistic components:
 - Modular microservices
@@ -52,12 +53,18 @@ Include realistic components:
 - External integrations (Payment, Identity)
 - SQL / NoSQL databases
 - Storage layers (S3, GCS)
+"""
+
+        if data.modifications:
+            user_prompt += "\nAlso improve the design by addressing these issues:\n- " + "\n- ".join(data.modifications)
+
+        user_prompt += """
 
 Return ONLY valid JSON in this format:
-{{
-  "nodes": [{{ "key": "...", "category": "actor|service|api|database|queue|monitoring|external" }}],
-  "links": [{{ "from": "...", "to": "..." }}]
-}}
+{
+  "nodes": [{ "key": "...", "category": "actor|service|api|database|queue|monitoring|external" }],
+  "links": [{ "from": "...", "to": "..." }]
+}
 
 Ensure services interact with one another and data flows make logical sense.
 """
@@ -124,4 +131,36 @@ async def analyze_diagram(data: DiagramData):
 
     except Exception as e:
         print("Analysis Error:", str(e))
+        return {"error": str(e)}
+
+
+@app.post("/improve-diagram")
+async def improve_diagram(data: DiagramData):
+    prompt = (
+        "You are a software architect. Here is the current system diagram:\n"
+        f"Nodes: {json.dumps(data.nodes, indent=2)}\n"
+        f"Links: {json.dumps(data.links, indent=2)}\n\n"
+        f"The following cons or weaknesses were identified:\n- " + "\n- ".join(data.question.split("\n")) +
+        "\n\nSuggest a revised system diagram that addresses these issues. Return only valid JSON with updated nodes and links."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+        )
+
+        message = response.choices[0].message.content.strip()
+        json_match = re.search(r"\{[\s\S]*\}", message)
+        if not json_match:
+            return {"error": "Unable to extract JSON from model output.", "raw": message}
+
+        parsed_json = json.loads(json_match.group(0))
+        return parsed_json
+
+    except Exception as e:
+        print("Improvement Error:", str(e))
         return {"error": str(e)}

@@ -10,6 +10,18 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
   @Input() links: { from: string; to: string }[] = [];
   private diagram!: go.Diagram;
 
+  private ICON_MAP: Record<string, string> = {
+    actor: 'https://img.icons8.com/ios-filled/100/user-male-circle.png',
+    service: 'https://img.icons8.com/ios/50/service--v1.png',
+    api: 'https://img.icons8.com/ios-filled/100/api.png',
+    database: 'https://img.icons8.com/ios-filled/100/database.png',
+    queue: 'https://img.icons8.com/ios-filled/100/queue.png',
+    monitoring: 'https://img.icons8.com/ios-filled/100/combo-chart.png',
+    external: 'https://img.icons8.com/ios-filled/100/external.png',
+    kafka: 'https://img.icons8.com/ios-filled/100/kafka.png',
+    default: 'https://img.icons8.com/ios-filled/100/cube.png',
+  };
+
   ngAfterViewInit() {
     this.initDiagram();
     this.renderDiagram();
@@ -35,16 +47,14 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
       padding: 20,
     });
 
-    // ✅ Set background separately (fixes the error)
     this.diagram.div!.style.backgroundColor = 'white';
 
-
-    // ACTOR: User
-    this.diagram.nodeTemplateMap.add('actor',
-      $(go.Node, 'Vertical',
+    const createNodeTemplate = (category: string) => {
+      const icon = this.ICON_MAP[category] || this.ICON_MAP['default'];
+      return $(go.Node, 'Vertical',
         { background: 'transparent' },
         $(go.Picture, {
-          source: 'https://img.icons8.com/ios-filled/100/000000/user-male-circle.png',
+          source: icon,
           desiredSize: new go.Size(64, 64),
           imageStretch: go.GraphObject.Uniform,
           margin: 4
@@ -54,65 +64,15 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
           font: 'bold 13px sans-serif',
           stroke: 'black'
         }, new go.Binding('text', 'key'))
-      )
-    );
+      );
+    };
 
-    // DATABASE
-    this.diagram.nodeTemplateMap.add('database',
-      $(go.Node, 'Vertical',
-        { background: 'transparent' },
-        $(go.Picture, {
-          source: 'https://img.icons8.com/ios-filled/100/000000/database.png',
-          desiredSize: new go.Size(64, 64),
-          imageStretch: go.GraphObject.Uniform,
-          margin: 4
-        }),
-        $(go.TextBlock, {
-          margin: 4,
-          font: 'bold 13px sans-serif',
-          stroke: 'black'
-        }, new go.Binding('text', 'key'))
-      )
-    );
+    const categories = ['actor', 'service', 'api', 'database', 'queue', 'monitoring', 'external', 'kafka'];
+    categories.forEach(cat => {
+      this.diagram.nodeTemplateMap.add(cat, createNodeTemplate(cat));
+    });
 
-    // SERVICE
-    this.diagram.nodeTemplateMap.add('service',
-      $(go.Node, 'Vertical',
-        { background: 'transparent' },
-        $(go.Picture, {
-          source: 'https://img.icons8.com/ios-filled/100/000000/microservices.png',
-          desiredSize: new go.Size(64, 64),
-          imageStretch: go.GraphObject.Uniform,
-          margin: 4
-        }),
-        $(go.TextBlock, {
-          margin: 4,
-          font: 'bold 13px sans-serif',
-          stroke: 'black'
-        }, new go.Binding('text', 'key'))
-      )
-    );
-
-    // API
-    this.diagram.nodeTemplateMap.add('api',
-      $(go.Node, 'Vertical',
-        { background: 'transparent' },
-        $(go.Picture, {
-          source: 'https://img.icons8.com/ios-filled/100/000000/api.png',
-          desiredSize: new go.Size(64, 64),
-          imageStretch: go.GraphObject.Uniform,
-          margin: 4
-        }),
-        $(go.TextBlock, {
-          margin: 4,
-          font: 'bold 13px sans-serif',
-          stroke: 'black'
-        }, new go.Binding('text', 'key'))
-      )
-    );
-
-    // DEFAULT
-    this.diagram.nodeTemplateMap.add('', 
+    this.diagram.nodeTemplateMap.add('',
       $(go.Node, 'Auto',
         $(go.Shape, 'RoundedRectangle', {
           fill: '#e2e8f0',
@@ -127,7 +87,6 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
       )
     );
 
-    // LINKS
     this.diagram.linkTemplate =
       $(go.Link,
         {
@@ -135,9 +94,28 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
           curve: go.Link.JumpOver,
           corner: 6
         },
-        $(go.Shape, { stroke: '#64748b', strokeWidth: 1.5 }),
-        $(go.Shape, { toArrow: 'Standard', fill: '#64748b', stroke: '#64748b' })
+        new go.Binding('points').makeTwoWay(),
+        $(go.Shape, {
+          strokeWidth: 2
+        }, new go.Binding('stroke', '', (data) => this.getLinkColor(data))),
+        $(go.Shape, {
+          toArrow: 'Standard',
+          stroke: null
+        }, new go.Binding('fill', '', (data) => this.getLinkColor(data)))
       );
+  }
+
+  private getLinkColor(link: { from: string; to: string }): string {
+    const fromNode = this.nodes.find(n => n.key === link.from);
+    const toNode = this.nodes.find(n => n.key === link.to);
+
+    if (!fromNode || !toNode) return '#64748b';
+
+    if (fromNode.category === 'api' && toNode.category === 'service') return '#2563eb'; // blue
+    if (fromNode.category === 'queue' || toNode.category === 'queue') return '#16a34a'; // green
+    if (fromNode.category === 'external' || toNode.category === 'external') return '#dc2626'; // red
+
+    return '#64748b'; // default gray
   }
 
   private renderDiagram() {
