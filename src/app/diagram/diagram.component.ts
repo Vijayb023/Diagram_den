@@ -1,14 +1,25 @@
 import { Component, Input, AfterViewInit, OnChanges, SimpleChanges } from '@angular/core';
+import { autofixDiagram } from '../utils/diagram-autofix.util';
 import * as go from 'gojs';
 
 @Component({
   selector: 'app-diagram',
-  template: '<div id="gojsDiagram" style="width:100%; height:600px;"></div>',
+  template: `
+    <div class="flex w-full">
+      <div class="flex-1 border p-2">
+        <div class="flex justify-between items-center mb-2">
+          <button (click)="zoomIn()" class="px-3 py-1 bg-indigo-500 text-white rounded">+</button>
+          <button (click)="zoomOut()" class="px-3 py-1 bg-indigo-500 text-white rounded">-</button>
+        </div>
+        <div id="gojsDiagram" style="width:100%; height:800px; border: 1px solid #ccc;"></div>
+      </div>
+    </div>
+  `,
 })
 export class DiagramComponent implements AfterViewInit, OnChanges {
   @Input() nodes: { key: string; category?: string }[] = [];
   @Input() links: { from: string; to: string }[] = [];
-  private diagram!: go.Diagram;
+  public diagram!: go.Diagram;
 
   private ICON_MAP: Record<string, string> = {
     actor: 'https://img.icons8.com/ios-filled/100/user-male-circle.png',
@@ -38,15 +49,22 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
 
     this.diagram = $(go.Diagram, 'gojsDiagram', {
       'undoManager.isEnabled': true,
-      layout: $(go.LayeredDigraphLayout, {
-        direction: 90,
-        layerSpacing: 80,
-        columnSpacing: 50,
-      }),
+          layout: $(go.LayeredDigraphLayout, {
+          direction: 90,
+          layerSpacing: 40,        // Reduced from 80
+          columnSpacing: 20,       // Reduced from 50
+          setsPortSpots: false,    // Prevents extra node padding
+          layeringOption: go.LayeredDigraphLayout.LayerLongestPathSource,
+          packOption: go.LayeredDigraphLayout.PackMedian, // Packs layout tighter
+    }),
       initialContentAlignment: go.Spot.Center,
-      padding: 20,
+      initialAutoScale: go.Diagram.Uniform,
+      isReadOnly: true,
+      'animationManager.isEnabled': false,
     });
 
+    this.diagram.toolManager.draggingTool.isGridSnapEnabled = true;
+    this.diagram.toolManager.draggingTool.gridSnapCellSize = new go.Size(10, 10);
     this.diagram.div!.style.backgroundColor = 'white';
 
     const createNodeTemplate = (category: string) => {
@@ -92,7 +110,8 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
         {
           routing: go.Link.AvoidsNodes,
           curve: go.Link.JumpOver,
-          corner: 6
+          corner: 6,
+          selectable: false
         },
         new go.Binding('points').makeTwoWay(),
         $(go.Shape, {
@@ -110,16 +129,32 @@ export class DiagramComponent implements AfterViewInit, OnChanges {
     const toNode = this.nodes.find(n => n.key === link.to);
 
     if (!fromNode || !toNode) return '#64748b';
+    if (fromNode.category === 'api' && toNode.category === 'service') return '#2563eb';
+    if (fromNode.category === 'queue' || toNode.category === 'queue') return '#16a34a';
+    if (fromNode.category === 'external' || toNode.category === 'external') return '#dc2626';
 
-    if (fromNode.category === 'api' && toNode.category === 'service') return '#2563eb'; // blue
-    if (fromNode.category === 'queue' || toNode.category === 'queue') return '#16a34a'; // green
-    if (fromNode.category === 'external' || toNode.category === 'external') return '#dc2626'; // red
-
-    return '#64748b'; // default gray
+    return '#64748b';
   }
 
   private renderDiagram() {
-    this.diagram.model = new go.GraphLinksModel(this.nodes, this.links);
+    const { fixedDiagram, warnings } = autofixDiagram({
+      nodes: this.nodes,
+      links: this.links,
+    });
+
+    this.diagram.model = new go.GraphLinksModel(fixedDiagram.nodes, fixedDiagram.links);
     this.diagram.zoomToFit();
+
+    if (warnings.length > 0) {
+      console.warn('Autofix warnings:', warnings);
+    }
+  }
+
+  zoomIn() {
+    if (this.diagram) this.diagram.scale *= 1.1;
+  }
+
+  zoomOut() {
+    if (this.diagram) this.diagram.scale *= 0.9;
   }
 }

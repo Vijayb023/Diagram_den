@@ -17,15 +17,16 @@ export class SystemAnalysisComponent {
   analysisSections: { title: string; items: string[] }[] = [];
 
   ngOnChanges() {
-    if (this.diagramText) {
-      try {
-        const parsed = JSON.parse(this.diagramText);
-        this.generateAnalysis(parsed.nodes, parsed.links);
-      } catch {
-        this.analysis = 'Invalid diagram JSON.';
-      }
+  if (this.diagramText && this.analysisSections.length === 0) {
+    try {
+      const parsed = JSON.parse(this.diagramText);
+      this.generateAnalysis(parsed.nodes, parsed.links);
+    } catch {
+      this.analysis = 'Invalid diagram JSON.';
     }
   }
+}
+
 
   async generateAnalysis(nodes: any[], links: any[]) {
     this.loading = true;
@@ -51,19 +52,24 @@ export class SystemAnalysisComponent {
     const pros = text.match(/(?<=Pros:)([\s\S]*?)(?=Cons:|$)/i);
     const cons = text.match(/(?<=Cons:)([\s\S]*?)(?=Improvements:|$)/i);
 
-    if (pros) {
-      this.analysisSections.push({
-        title: 'Pros',
-        items: pros[0].trim().split('\n').filter(Boolean),
-      });
-    }
+      if (pros) {
+        const items = pros[0]
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .filter(line => !/^pros?:?/i.test(line));  // 🚫 remove lines like "Pros:"
+        this.analysisSections.push({ title: 'Pros', items });
+      }
 
-    if (cons) {
-      this.analysisSections.push({
-        title: 'Cons',
-        items: cons[0].trim().split('\n').filter(Boolean),
-      });
-    }
+      if (cons) {
+        const items = cons[0]
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .filter(line => !/^cons?:?/i.test(line));  // 🚫 remove lines like "Cons:"
+        this.analysisSections.push({ title: 'Cons', items });
+      }
+
   }
 
   handleConsClick(con: string) {
